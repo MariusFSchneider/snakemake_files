@@ -1,0 +1,19 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - snakemake-minimal = 7.2
+  - python
+  - pandas
+  - jinja2 =2.11
+  - networkx =2.5
+  - matplotlib =3.3
+  - graphviz =2.42
+  - bcftools =1.9
+  - samtools =1.9
+  - bwa =0.7
+  - pysam =0.15
+  - pandas = 1.4.3
+  - sra-tools = 2.11
+  - bowtie2 = 2.4.5
+  - macs2 >= 2.2

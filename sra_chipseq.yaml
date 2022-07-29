@@ -1,0 +1,14 @@
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - snakemake-minimal =7.2
+  - python
+  - pandas
+  - sra-tools =2.10
+  - samtools =1.9
+  - bwa =0.7
+  - pysam =0.15
+  - bowtie2 = 2.4.5
+  - macs2 >= 2.2
+  - deeptools 3.5.1

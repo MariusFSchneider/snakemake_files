@@ -1,0 +1,6 @@
+samples: samples.csv
+genome_size: dm
+genomeFTP: https://hgdownload.soe.ucsc.edu/goldenPath/dm6/bigZips/dm6.fa.gz
+bigWig_normalization: RPKM
+binSize: 1
+q_cutOff_peakCall: 30
