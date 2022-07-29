@@ -57,9 +57,8 @@ rule prefetch:
     conda:
         "sra_chipseq.yaml"
     shell:
-        """
-        prefetch {params} > {log} 2>&1 && touch {output}
-        """
+        "(prefetch {params})2> {log}"
+    
 
 rule fastqdump:
     input:
