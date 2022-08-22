@@ -92,7 +92,7 @@ def getRUN_info(link_oi, geo_oi):
     if srr_result == "na":
         srr_result2 = getRUN_info_byGEO(geo_oi)
         if srr_result == "na":
-            åreturn "na"
+            return "na"
         else:
             return srr_result2
     else:
