@@ -18,8 +18,9 @@ def getSRR(accession):
     srr = input_data['Run']
     modus = input_data['LibraryLayout']
     project = input_data["BioProject"]
-    sample_type = input_data["SampleType"]
-    return list(srr+ "_" + modus + '_' + project + '_' + sample_type)
+    sample_type = input_data["Sample"]
+    sample_bio = input_data["BioSample"]
+    return list(srr+ "_" + modus + '_' + project + '_' + sample_type + '_' + sample_bio )
 
 
 
@@ -126,7 +127,7 @@ SAMPLES =SAMPLES.explode('SRR')
 SAMPLES = SAMPLES[SAMPLES['SRR'] != "na"]
 ## split SRR to SRR and mode column:
 
-SAMPLES[['SRR', 'modus','project','sample_id']] = SAMPLES['SRR'].str.split('_', expand=True)
+SAMPLES[['SRR', 'modus','project','sample_id','bio_sample']] = SAMPLES['SRR'].str.split('_', expand=True)
 SAMPLES = SAMPLES.drop_duplicates()
 
 SAMPLES.to_csv("output/unique_samples.txt", sep = ";")
