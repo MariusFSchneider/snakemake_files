@@ -1,5 +1,6 @@
 configfile: "config.yaml"
 import pandas as pd
+from itertools import combinations
 samples_data = pd.read_csv(config['samples'], sep =";")
 
 #SAMPLE = samples_data["sample"]
@@ -7,19 +8,25 @@ ACCESSIONS = samples_data["SRR"]
 SAMPLES = samples_data["Sample Name"]
 ANTIBODIES = samples_data["Experiment"]
 LAYOUT = samples_data["modus"]
-antibodies_used = config["antibodies"]
+antibodies_used = ["H3K4me3", "H3K27me3"]
+#antibodies_used = config["antibodies"]
+antibodies_combination = [*combinations(antibodies_used, 2)]
 sl = samples_data["modus"]+ "/" + samples_data["SRR"]
+sp = samples_data["bio_sample"]+ "_" + samples_data["project"]
 biosample = samples_data["bio_sample"]
-project = samples_data["project"]
-sp = biosample + '_' + project
-sample_size = samples_data["library_size"]
 #localrules: prefetch, get_index_files, fastqdump
-
+sa = samples_data["Experiment"] + "/" + samples_data["SRR"]
 
 rule all:
     input:
+        #expand("02_mapped/{layout_srr}.sam", layout_srr= sl)
+        #expand("02_mapped/SINGLE/{srr}.sam", srr = ACCESSIONS[LAYOUT =="SINGLE"]),
+        #expand("02_mapped/PAIRED/{srr}.sam", srr = ACCESSIONS[LAYOUT =="PAIRED"])
+        #expand("02_mapped/filtered/{srr}.sam", srr = ACCESSIONS)
         expand("02_mapped/sorted/{srr}.bam.bai", srr = ACCESSIONS),
-        expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"])
+        expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"]),
+        expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
+        expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])
 
 def get_Sam(wildcards):
    return expand("02_mapped/{layout_srr}.sam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
@@ -28,9 +35,11 @@ def get_Sam(wildcards):
 def getINPUTS(wildcards):
     return expand("02_mapped/sorted/{srr}.bam", srr = ACCESSIONS.loc[(sp == wildcards.bio_id) & (ANTIBODIES == "ChIP-Seq input")])
 
-def getLibSize(wildcards):
-   return expand("02_mapped/{layout_srr}.sam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
+def getTreat(wildcards):
+   return expand("02_mapped/sorted/{srr}.bam", srr = list(ACCESSIONS[sa==wildcards.sa]))
 
+def getCtrl(wildcards):
+    return expand("02_mapped/input/{bio_id}.bam", bio_id = list(sp[sa==wildcards.sa]))
 
 rule get_index_files:
     params:
@@ -86,7 +95,7 @@ rule fastqdump_SINGLE:
         id_srr = "{srr}"
     conda:
         "sra_chipseq.yaml"
-    threads: 16
+    threads: 24
     shell:
         "fasterq-dump {params.args} {params.id_srr} -e {threads}"
 
@@ -102,7 +111,7 @@ rule fastqdump_PAIRED:
         id_srr = "{srr}"
     conda:
         "sra_chipseq.yaml"
-    threads: 16
+    threads: 24
     shell:
         "fasterq-dump {params.args} {params.id_srr} -e {threads}"
 
@@ -116,11 +125,7 @@ rule bowtie2_map_SINGLE:
         temp("02_mapped/SINGLE/{srr}.sam")
     conda:
         "sra_chipseq.yaml"
-    params:
-        size: getLibSize
     threads: 24
-    resources:
-        mem_mb=20000
     shell:
         "bowtie2 -p {threads} -x genome -U {input.read} -S {output}"
 
@@ -133,11 +138,7 @@ rule bowtie2_map_PAIRED:
         temp("02_mapped/PAIRED/{srr}.sam")
     conda:
         "sra_chipseq.yaml"
-    params:
-        size: getLibSize
     threads: 24
-    resources:
-        mem_mb=20000
     shell:
         "bowtie2 -p {threads} -x genome -1 {input.read_1} -2 {input.read_2} -S {output}"
 
@@ -193,3 +194,31 @@ rule merge_inputs:
     threads: 8
     shell:
         "samtools merge --threads {threads} -o {output} {input}"
+
+rule call_peaks:
+    input:
+        treat = getTreat,
+        ctrl = getCtrl
+    output:
+        protected("03_calledPeaks/{sa}_summits.bed")
+    params:
+        input = "-f BAM -g ",
+        genome_size = config['genome_size'],
+        qCutOff = config["q_cutOff_peakCall"]
+    threads:2
+    shell:
+        "macs2 callpeak -t {input.treat} -c {input.ctrl} {params.input} {params.genome_size} --outdir 03_calledPeaks/ -n {wildcards.sa} -q {params.qCutOff})"
+
+rule make_bigWig:
+    input:
+        sample= "02_mapped/sorted/{srr}.bam",
+        index = "02_mapped/sorted/{srr}.bam.bai"
+
+    output:
+        "04_bigWigFiles/{srr}.bw"
+    params:
+        normalization = config["bigWig_normalization"],
+        binsize= config["binSize"]
+    threads: 8
+    shell:
+        "bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads})"
