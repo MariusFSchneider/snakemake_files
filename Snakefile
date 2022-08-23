@@ -10,7 +10,7 @@ LAYOUT = samples_data["modus"]
 antibodies_used = config["antibodies"]
 sl = samples_data["modus"]+ "/" + samples_data["SRR"]
 biosample = samples_data["bio_sample"]
-project = samples_data["bioproject"]
+project = samples_data["project"]
 sp = biosample + '_' + project
 sample_size = samples_data["library_size"]
 #localrules: prefetch, get_index_files, fastqdump
@@ -18,10 +18,6 @@ sample_size = samples_data["library_size"]
 
 rule all:
     input:
-        #expand("02_mapped/{layout_srr}.sam", layout_srr= sl)
-        #expand("02_mapped/SINGLE/{srr}.sam", srr = ACCESSIONS[LAYOUT =="SINGLE"]),
-        #expand("02_mapped/PAIRED/{srr}.sam", srr = ACCESSIONS[LAYOUT =="PAIRED"])
-        #expand("02_mapped/filtered/{srr}.sam", srr = ACCESSIONS)
         expand("02_mapped/sorted/{srr}.bam.bai", srr = ACCESSIONS),
         expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"])
 
@@ -32,6 +28,8 @@ def get_Sam(wildcards):
 def getINPUTS(wildcards):
     return expand("02_mapped/sorted/{srr}.bam", srr = ACCESSIONS.loc[(sp == wildcards.bio_id) & (ANTIBODIES == "ChIP-Seq input")])
 
+def getLibSize(wildcards):
+   return expand("02_mapped/{layout_srr}.sam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
 
 
 rule get_index_files:
@@ -118,6 +116,8 @@ rule bowtie2_map_SINGLE:
         temp("02_mapped/SINGLE/{srr}.sam")
     conda:
         "sra_chipseq.yaml"
+    params:
+        size: getLibSize
     threads: 24
     resources:
         mem_mb=20000
@@ -133,6 +133,8 @@ rule bowtie2_map_PAIRED:
         temp("02_mapped/PAIRED/{srr}.sam")
     conda:
         "sra_chipseq.yaml"
+    params:
+        size: getLibSize
     threads: 24
     resources:
         mem_mb=20000
