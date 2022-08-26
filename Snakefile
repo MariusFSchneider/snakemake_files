@@ -32,8 +32,17 @@ rule all:
         expand("02_mapped/sorted/{srr}.bam.bai", srr = ACCESSIONS),
         expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"]),
         expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
-        expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])
+        expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"]),
+        
+### add code to file        
+        expand("{AB}_quantified.csv", AB = total_abs.drop.duplicates)
+        
+def getAllBW_files(wildcards): ##use this as first input for last rule to run the Rscript for qunatification
+    expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])
 
+def getALLPeak_files():    ##use this as second input for last rule to run the Rscript for qunatification
+    expand("03_calledPeaks/{ab_oi}/{sample_oi}_summits.bed", ab_oi = wildcards.AB, sample = total_samples.loc[total_abs = ab_oi])
+    
 def get_Sam(wildcards):
    return expand("02_mapped/{layout_srr}.sam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
 
