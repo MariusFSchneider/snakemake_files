@@ -3,14 +3,24 @@ import pandas as pd
 from itertools import combinations
 samples_data = pd.read_csv(config['samples'], sep =";")
 
-#SAMPLE = samples_data["sample"]
-ACCESSIONS = samples_data["SRR"]
-SAMPLES = samples_data["Sample Name"]
-ANTIBODIES = samples_data["Experiment"]
-LAYOUT = samples_data["modus"]
 antibodies_used = ["H3K4me3", "H3K27me3"]
 #antibodies_used = config["antibodies"]
 antibodies_combination = [*combinations(antibodies_used, 2)]
+
+
+###add this to code to reduce samples and to tidy up table
+samples_data = samples_data.loc[samples_data["Exeriment"].isin(antibodies_oi)]
+samples_data['Sample Name'] = samples_data["Sample Name"].str.replace(',','_')
+samples_data['Sample Name'] = samples_data["Sample Name"].str.replace('\s','_')
+
+
+ACCESSIONS = samples_data["SRR"]
+
+ANTIBODIES = samples_data["Experiment"]
+LAYOUT = samples_data["modus"]
+BIOSAMPLE = samples_data["biosample"]
+BIOPROJECT = samples_data
+
 sl = samples_data["modus"]+ "/" + samples_data["SRR"]
 sp = samples_data["bio_sample"]+ "_" + samples_data["project"]
 biosample = samples_data["bio_sample"]
@@ -19,10 +29,6 @@ sa = samples_data["Experiment"] + "/" + samples_data["SRR"]
 
 rule all:
     input:
-        #expand("02_mapped/{layout_srr}.sam", layout_srr= sl)
-        #expand("02_mapped/SINGLE/{srr}.sam", srr = ACCESSIONS[LAYOUT =="SINGLE"]),
-        #expand("02_mapped/PAIRED/{srr}.sam", srr = ACCESSIONS[LAYOUT =="PAIRED"])
-        #expand("02_mapped/filtered/{srr}.sam", srr = ACCESSIONS)
         expand("02_mapped/sorted/{srr}.bam.bai", srr = ACCESSIONS),
         expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"]),
         expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
