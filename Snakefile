@@ -283,13 +283,14 @@ rule Merge_BWs:
         "03_calledPeaks/{abcombo}/{samples}_summits.bed"
     conda:
         "sra_chipseq.yaml"
+    params:      
         genome_size = config['genome_size'],
         qCutOff = config["q_cutOff_peakCall"]
     threads: 2        
     shell:
         "bedtools unionbedg -i {input.file1} {input.file2} > 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bedGraph"
         "python scripts/takeLower.py 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bedGraph 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bw"
-        ""
+        "macs2 bdgpeakcall -c {params.qCutOff} -i 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bw -o 03_calledPeaks/{wildcards.abcombo}/{wildcards.samples}"
         
 rule quantify_peaks_combo:
     input:
