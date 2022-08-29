@@ -38,22 +38,35 @@ rule all:
         expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"]),
         
  ## add code to file       
-        
+        expand("05_quantified_signal\{abs}_quantified.csv", abs = ANTIBODIES.drop.duplicates())       
         expand("06_merged_Samples/{ab}/{samples}.bw, ab = ANTIBODIES.drop.duplicates(), samples = SAMPLES.drop.duplicates()"),
-        expand("05_quantified_signal\{abs}_quantified.csv", abs = ANTIBODIES.drop.duplicates())
-        expand("03_calledPeaks/{abcombo}/{samples2}_summits.bed", abcombo= combo, samples2= SAMPLES.drop.duplicates())
+        expand("03_calledPeaks/{abcombo}/{samples2}_summits.bed", abcombo= combo, samples2= SAMPLES.drop.duplicates()),
+        expand("05_quantified_signal\{ab_combo}_quantified.csv", abcombo = combo)
         
 ### add code to file 
-def get
+def getPeakFile_combo(wildcards):
+    return expand("03_calledPeaks/{abcombo}/{samples2}_summits.bed", abcombo = combo, samples2 =SAMPLES.drop.duplicates() )
+
+
+def getFile1(wildcards):
+    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = ab1[combo == wildcards.abcombo], samples = wildcards.samples2)
+
+def getFile2(wildcards):
+    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = ab2[combo == wildcards.abcombo], samples = wildcards.samples2)
+
+
 def Merge_SAMPLES(wildcards):
     return expand("02_mapped/sorted/{srr}.bam", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab) & (SAMPLES == wildcards.ab)])
 
 def getPeakFile_single(wildcards):
     return expand(""03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES ==wildcards.abs]")
 
-def getBW_single(wildcards):
+def getBW(wildcards):
     return expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])    
 
+
+
+#### modify codes
 def get_Bam(wildcards):
    return expand("02_mapped/{layout}/{srr}.bam",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"], layout = list(LAYOUT[ACCESSION==wildcards.srr]))
 
@@ -234,7 +247,7 @@ rule make_bigWig:
 rule quantify_peaks_single:
     input:
         peaks= getPeakFile_single,
-        coverage = getBW_single
+        coverage = getBW
     output:
         "05_quantified_signal\{ab}_quantified.csv"
     threads: 8
@@ -250,7 +263,7 @@ rule Merge_BWs:
         "sra_chipseq.yaml"
     threads: 8
     shell:
-        ""
+        ""  ##hast to be modified
  rule find_overlaps:
     input:
         file1= getFile1,
@@ -258,4 +271,15 @@ rule Merge_BWs:
     output:
         "03_calledPeaks/{abcombo}/{samples2}_summits.bed"
     shell:
+        "" ##has to be modified
+        
+rule quantify_peaks_combo:
+    input:
+        peaks= getPeakFile_compo,
+        coverage = getBW
+    output:
+        "05_quantified_signal\{ab_combo}_quantified.csv"
+    threads: 8
+    shell:
+        "Rscript quantify {wildcards.ab_combo}"
     
