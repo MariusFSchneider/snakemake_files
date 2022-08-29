@@ -6,12 +6,20 @@ samples_data = pd.read_csv(config['samples'], sep =";")
 ACCESSIONS = samples_data["accession"]
 SAMPLES = samples_data["samples"]
 
+antibodies_used = ["mof", "msl2"]
+#antibodies_used = config["antibodies"]
+antibodies_combination = [*combinations(antibodies_used, 2)]
+antibodies_combination = pd.DataFrame(antibodies_combination, columns =['AB1','AB2'])
+ab1 = antibodies_combination.AB1
+ab2 = antibodies_combination.AB2
+combo =ab1 +"_" +ab2
+
 rule all:
     input:
         expand("02_mapped/{srr}.bam", srr = ACCESSIONS),
         expand("04_bigWigFiles/{sample}.bw", sample = SAMPLES),
         expand("03_calledPeaks/{sample}_summits.bed", sample = SAMPLES[SAMPLES != "input"])
-
+        expand("05_quantified_signal\{sample}_quantified.csv", sample =  SAMPLES[SAMPLES != "input"]) 
 
 def getTreatment(wildcards):
     return expand("02_mapped/{srr}.bam",
@@ -22,7 +30,10 @@ def getSample(wildcards):
 def getIndex(wildcards):
     return expand("04_sorted/{srr}.bam.bai",
     srr = list(samples_data[samples_data["samples"]==wildcards.sample]["accession"]))
-
+def getPeakFile_single(wildcards):
+    return expand(""03_calledPeaks/{samples}_summits.bed", samples = SAMPLES[SAMPLES != "input"])
+def getBW(wildcards):
+    return expand("04_bigWigFiles/{sample}.bw",  samples = SAMPLES[SAMPLES != "input"])  
 
 rule get_index_files:
     params:
@@ -153,3 +164,15 @@ rule make_bigWig:
         "04_bigWigFiles/{sample}.log"
     shell:
         "(bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads})2> log"
+  
+  rule quantify_peaks_single:
+    input:
+        peaks= getPeakFile_single,
+        coverage = getBW
+    output:
+        "05_quantified_signal\{ab}_quantified.csv"
+    threads: 2
+    conda:
+        "sra_chipseq.yaml"        
+    shell:
+        "Rscript scripts/Quantify_Regions.s {wildcards.ab}"
