@@ -154,8 +154,6 @@ rule fastqdump_PAIRED:
     shell:
         "fasterq-dump {params.args} {params.id_srr} -e {threads}"
 
-
-
 rule bowtie2_map_SINGLE:
     input:
         read = "01_raw/SINGLE/{srr}.fastq",
@@ -255,27 +253,27 @@ rule quantify_peaks_single:
     conda:
         "sra_chipseq.yaml"        
     shell:
-        "Rscript quantify {wildcards.ab}"
+        "Rscript scripts/Quantify_Regions.s {wildcards.ab}"
         
 rule Merge_BWs:
     input: 
         Merge_SAMPLES
     output:
-        protected("06_merged_Samples/{ab}/{samples}.bw")
+        temp("06_merged_Samples/{ab}/{samples}.bw")
     conda:
         "sra_chipseq.yaml"
     params:
         normalization = config["bigWig_normalization"],
         binsize= config["binSize"]        
-    threads: 4
+    threads: 8
     shell:
         "samtools merge --threads {threads} -o 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam {input}"
         "samtools sort -T 06_merged_Samples/{wildcards.ab}/{wildcards.samples} -O 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam > 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
         "samtools index 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
         "bamCoverage -b 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads}"
-        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam "
-        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam "
-        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam.bai "
+        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam"
+        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
+        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam.bai"
         
  rule find_overlaps:
     input:
@@ -284,9 +282,14 @@ rule Merge_BWs:
     output:
         "03_calledPeaks/{abcombo}/{samples}_summits.bed"
     conda:
-        "sra_chipseq.yaml"        
+        "sra_chipseq.yaml"
+        genome_size = config['genome_size'],
+        qCutOff = config["q_cutOff_peakCall"]
+    threads: 2        
     shell:
-        "" ##has to be modified
+        "bedtools unionbedg -i {input.file1} {input.file2} > 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bedGraph"
+        "python scripts/takeLower.py 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bedGraph 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bw"
+        ""
         
 rule quantify_peaks_combo:
     input:
@@ -298,5 +301,5 @@ rule quantify_peaks_combo:
         "sra_chipseq.yaml"        
     threads: 2
     shell:
-        "Rscript quantify {wildcards.ab_combo}"
+        "Rscript scripts/Quantify_Regions.s {wildcards.ab_combo}"
     
