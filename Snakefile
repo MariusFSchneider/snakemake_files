@@ -22,8 +22,8 @@ LAYOUT = samples_data["modus"]
 BIOSAMPLE = samples_data["biosample"]
 BIOPROJECT = samples_data["project"]
 
-sp = samples_data["bio_sample"]+ "_" + samples_data["project"]
-sa = samples_data["Experiment"] + "/" + samples_data["SRR"]
+sp = BIOSAMPLE + "_" + BIOPROJECT
+sa = ANTIBODIES + "/" + ACCESSIONS
 
 #localrules: prefetch, get_index_files, fastqdump
 
@@ -34,12 +34,19 @@ rule all:
         expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
         expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"]),
         
-### add code to file        
-        expand("{AB}_quantified.csv", AB = total_abs.drop.duplicates)
         
+        
+        expand("05_quantified_signal\{abs}_quantified.csv", abs = ANTIBODIES.drop.duplicates())
+        
+### add code to file        
+def getPeakFile_single(wildcards):
+    return expand(""03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES ==wildcards.abs]")
 
-def get_Sam(wildcards):
-   return expand("02_mapped/{layout}/{wildcards.srr}.sam", layout = list(LAYOUT[samples_data['SRR']==wildcards.srr]))
+def getBW_single(wildcards):
+    return expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])    
+
+def get_Bam(wildcards):
+   return expand("02_mapped/{layout}/{wildcards.srr}.bam", layout = list(LAYOUT[samples_data['SRR']==wildcards.srr]))
 
 
 def getINPUTS(wildcards):
@@ -166,13 +173,13 @@ rule samtools_sort_index:
     input:
         get_Bam
     output:
-        BAM = protected("02_mapped/sorted/{srr}.bam")
+        BAMO = protected("02_mapped/sorted/{srr}.bam"),
+        BAIO = protected("02_mapped/sorted/{srr}.bam.bai")
     conda:
         "sra_chipseq.yaml"
     shell:
-    # why wildcards.sample? and not sample
-        "samtools sort -T 02_mapped/sorted/{wildcards.srr} -O bam {input} > {output}"
-         "samtools index {input}"
+        "samtools sort -T 02_mapped/sorted/{wildcards.srr} -O bam {input} > {output.BAMO}"
+        "samtools index {input}"
 
 
 
@@ -214,4 +221,13 @@ rule make_bigWig:
     threads: 8
     shell:
         "bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads})"
-    
+ 
+rule quantify_peaks_single:
+    input:
+        peaks= getPeakFile_single,
+        coverage = getBW_single
+     output:
+        "05_quantified_signal\{ab}_quantified.csv"
+      shell:
+        "Rscript quantify {wildcards.ab}"
+        
