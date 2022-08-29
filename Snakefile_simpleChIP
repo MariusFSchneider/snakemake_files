@@ -18,9 +18,12 @@ rule all:
     input:
         expand("02_mapped/{srr}.bam", srr = ACCESSIONS),
         expand("04_bigWigFiles/{sample}.bw", sample = SAMPLES),
-        expand("03_calledPeaks/{sample}_summits.bed", sample = SAMPLES[SAMPLES != "input"])
-        expand("05_quantified_signal\{sample}_quantified.csv", sample =  SAMPLES[SAMPLES != "input"]) 
-
+        expand("03_calledPeaks/{sample}_summits.bed", sample = SAMPLES[SAMPLES != "input"]),
+### add this to code        
+        expand("05_quantified_signal\{sample}_quantified.csv", sample =  SAMPLES[SAMPLES != "input"]),
+ #       expand("03_calledPeaks/{abcombo}_summits.bed", abcombo = combo),
+        expand("05_quantified_signal\{abcombo}_quantified.csv",  abcombo = combo)
+        
 def getTreatment(wildcards):
     return expand("02_mapped/{srr}.bam",
     srr = list(samples_data[samples_data["samples"]==wildcards.sample]["accession"]))
@@ -30,10 +33,19 @@ def getSample(wildcards):
 def getIndex(wildcards):
     return expand("04_sorted/{srr}.bam.bai",
     srr = list(samples_data[samples_data["samples"]==wildcards.sample]["accession"]))
+### add this to code
+
 def getPeakFile_single(wildcards):
-    return expand(""03_calledPeaks/{samples}_summits.bed", samples = SAMPLES[SAMPLES != "input"])
+    return expand("03_calledPeaks/{samples}_summits.bed", samples = SAMPLES[SAMPLES != "input"])
 def getBW(wildcards):
     return expand("04_bigWigFiles/{sample}.bw",  samples = SAMPLES[SAMPLES != "input"])  
+
+def getFile1(wildcards):
+    return expand("04_bigWigFiles/{sample}.bw", sample = ab1[cobo = wildcards.abcombo])
+def getFile2(wildcards):
+    return expand("04_bigWigFiles/{sample}.bw", sample = ab2[cobo = wildcards.abcombo])    
+def getPeakFile_compo(wildcards):
+    return expand("03_calledPeaks/{abcombo}_summits.bed", abcombo = wildcards.abcombo)
 
 rule get_index_files:
     params:
@@ -176,3 +188,32 @@ rule make_bigWig:
         "sra_chipseq.yaml"        
     shell:
         "Rscript scripts/Quantify_Regions.s {wildcards.ab}"
+        
+rule find_overlaps:
+    input:
+        file1= getFile1,
+        file2= getFile2
+    output:
+        "03_calledPeaks/{abcombo}_summits.bed"
+    conda:
+        "sra_chipseq.yaml"
+    params:      
+        genome_size = config['genome_size'],
+        qCutOff = config["q_cutOff_peakCall"]
+    threads: 2        
+    shell:
+        "bedtools unionbedg -i {input.file1} {input.file2} > 06_merged_Samples/{wildcards.abcombo}.bedGraph"
+        "python scripts/takeLower.py 06_merged_Samples/{wildcards.abcombo}.bedGraph 06_merged_Samples/{wildcards.abcombo}.bw"
+        "macs2 bdgpeakcall -i 06_merged_Samples/{wildcards.samples}.bw-c {params.qCutOff} -o 03_calledPeaks/{wildcards.abcombo}"
+        
+rule quantify_peaks_combo:
+    input:
+        peaks= getPeakFile_compo,
+        coverage = getBW
+    output:
+        "05_quantified_signal\{ab_combo}_quantified.csv"
+    conda:
+        "sra_chipseq.yaml"        
+    threads: 2
+    shell:
+        "Rscript scripts/Quantify_Regions.s {wildcards.ab_combo}"
