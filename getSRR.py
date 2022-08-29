@@ -133,10 +133,11 @@ SAMPLES = SAMPLES.drop_duplicates()
 
 SAMPLES.to_csv("output/unique_samples.txt", sep = ";")
 
-
+SAMPLES = pd.read_csv("output/unique_samples.txt", delimiter = ";")
 
 data_selected = SAMPLES[SAMPLES['Experiment'].isin(["ChIP-Seq input","H3K4me3","H3K27me3"])]
 
+data_selected.to_csv("output/unique_samples_selected.csv", sep = ";")
 
 test_data = data_selected[data_selected['Sample Name'].isin(["spleen","neurosphere cultured cells, ganglionic eminence derived"])]
 
