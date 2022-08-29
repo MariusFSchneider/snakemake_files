@@ -7,7 +7,10 @@ antibodies_oi = ["H3K4me3", "H3K27me3", ]
 antibodies_used = ["H3K4me3", "H3K27me3"]
 #antibodies_used = config["antibodies"]
 antibodies_combination = [*combinations(antibodies_used, 2)]
-
+antibodies_combination = pd.DataFrame(antibodies_combination, columns =['AB1','AB2'])
+ab1 = antibodies_combination.AB1
+ab2 = antibodies_combination.AB2
+combo =ab1 +"_" +ab2
 
 ###add this to code to reduce samples and to tidy up table
 samples_data = samples_data.loc[samples_data["Exeriment"].isin(antibodies_oi)]
@@ -34,11 +37,17 @@ rule all:
         expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
         expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"]),
         
+ ## add code to file       
         
-        
+        expand("06_merged_Samples/{ab}/{samples}.bw, ab = ANTIBODIES.drop.duplicates(), samples = SAMPLES.drop.duplicates()"),
         expand("05_quantified_signal\{abs}_quantified.csv", abs = ANTIBODIES.drop.duplicates())
+        expand("03_calledPeaks/{abcombo}/{samples2}_summits.bed", abcombo= combo, samples2= SAMPLES.drop.duplicates())
         
-### add code to file        
+### add code to file 
+def get
+def Merge_SAMPLES(wildcards):
+    return expand("02_mapped/sorted/{srr}.bam", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab) & (SAMPLES == wildcards.ab)])
+
 def getPeakFile_single(wildcards):
     return expand(""03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES ==wildcards.abs]")
 
@@ -46,7 +55,7 @@ def getBW_single(wildcards):
     return expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])    
 
 def get_Bam(wildcards):
-   return expand("02_mapped/{layout}/{wildcards.srr}.bam", layout = list(LAYOUT[samples_data['SRR']==wildcards.srr]))
+   return expand("02_mapped/{layout}/{srr}.bam",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"], layout = list(LAYOUT[ACCESSION==wildcards.srr]))
 
 
 def getINPUTS(wildcards):
@@ -226,8 +235,27 @@ rule quantify_peaks_single:
     input:
         peaks= getPeakFile_single,
         coverage = getBW_single
-     output:
+    output:
         "05_quantified_signal\{ab}_quantified.csv"
-      shell:
+    threads: 8
+    shell:
         "Rscript quantify {wildcards.ab}"
         
+rule Merge_BWs:
+    input: 
+        Merge_SAMPLES
+    output:
+        "06_merged_Samples/{ab}/{samples}.bw"
+    conda:
+        "sra_chipseq.yaml"
+    threads: 8
+    shell:
+        ""
+ rule find_overlaps:
+    input:
+        file1= getFile1,
+        file2= getFile2
+    output:
+        "03_calledPeaks/{abcombo}/{samples2}_summits.bed"
+    shell:
+    
