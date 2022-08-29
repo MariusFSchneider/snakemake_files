@@ -3,6 +3,7 @@ import pandas as pd
 from itertools import combinations
 samples_data = pd.read_csv(config['samples'], sep =";")
 
+antibodies_oi = ["H3K4me3", "H3K27me3", ]
 antibodies_used = ["H3K4me3", "H3K27me3"]
 #antibodies_used = config["antibodies"]
 antibodies_combination = [*combinations(antibodies_used, 2)]
@@ -15,17 +16,16 @@ samples_data['Sample Name'] = samples_data["Sample Name"].str.replace('\s','_')
 
 
 ACCESSIONS = samples_data["SRR"]
-
+SAMPLES = samples_data["Sample"]
 ANTIBODIES = samples_data["Experiment"]
 LAYOUT = samples_data["modus"]
 BIOSAMPLE = samples_data["biosample"]
-BIOPROJECT = samples_data
+BIOPROJECT = samples_data["project"]
 
-sl = samples_data["modus"]+ "/" + samples_data["SRR"]
 sp = samples_data["bio_sample"]+ "_" + samples_data["project"]
-biosample = samples_data["bio_sample"]
-#localrules: prefetch, get_index_files, fastqdump
 sa = samples_data["Experiment"] + "/" + samples_data["SRR"]
+
+#localrules: prefetch, get_index_files, fastqdump
 
 rule all:
     input:
@@ -37,14 +37,9 @@ rule all:
 ### add code to file        
         expand("{AB}_quantified.csv", AB = total_abs.drop.duplicates)
         
-def getAllBW_files(wildcards): ##use this as first input for last rule to run the Rscript for qunatification
-    expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])
 
-def getALLPeak_files():    ##use this as second input for last rule to run the Rscript for qunatification
-    expand("03_calledPeaks/{ab_oi}/{sample_oi}_summits.bed", ab_oi = wildcards.AB, sample = total_samples.loc[total_abs = ab_oi])
-    
 def get_Sam(wildcards):
-   return expand("02_mapped/{layout_srr}.sam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
+   return expand("02_mapped/{layout}/{wildcards.srr}.sam", layout = list(LAYOUT[samples_data['SRR']==wildcards.srr]))
 
 
 def getINPUTS(wildcards):
@@ -142,62 +137,44 @@ rule bowtie2_map_SINGLE:
         "sra_chipseq.yaml"
     threads: 24
     shell:
-        "bowtie2 -p {threads} -x genome -U {input.read} -S {output}"
-
+        "bowtie2 -p {threads} -x genome -U {input.read} -S 02_mapped/SINGLE/{wildcards.srr}.sam)2> 02_mapped/SINGLE/{wildcards.srr}_alignment.txt"
+        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > 02_mapped/SINGLE/{wildcards.srr}_filtered.sam"
+        "samtools view --threads {threads} -b {input} > {output}"    
+        "rm -f 02_mapped/SINGLE/{wildcards.srr}.sam"
+        "rm -f 02_mapped/SINGLE/{wildcards.srr}_filtered.sam"
+        
+        
 rule bowtie2_map_PAIRED:
     input:
         read_1 = "01_raw/PAIRED/{srr}_1.fastq",
         read_2 = "01_raw/PAIRED/{srr}_2.fastq",
         genome = "genome.1.bt2"
     output:
-        temp("02_mapped/PAIRED/{srr}.sam")
+        temp("02_mapped/PAIRED/{srr}.bam")
     conda:
         "sra_chipseq.yaml"
     threads: 24
     shell:
-        "bowtie2 -p {threads} -x genome -1 {input.read_1} -2 {input.read_2} -S {output}"
+        "(bowtie2 -p {threads} -x genome -1 {input.read_1} -2 {input.read_2} -S 02_mapped/PAIRED/{wildcards.srr}.sam)2> 02_mapped/PAIRED/{wildcards.srr}_alignment.txt"
+        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > 02_mapped/PAIRED/{wildcards.srr}_filtered.sam"
+        "samtools view --threads {threads} -b {input} > {output}"    
+        "rm -f 02_mapped/PAIRED/{wildcards.srr}.sam"
+        "rm -f 02_mapped/PAIRED/{wildcards.srr}_filtered.sam"
 
-rule filterSAM:
+
+rule samtools_sort_index:
     input:
-        "02_mapped/PAIRED/{srr}.sam"
+        get_Bam
     output:
-        temp("02_mapped/filtered/{srr}.sam")
-    conda:
-        "sra_chipseq.yaml"
-    threads: 8
-    shell:
-        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > {output}"
-
-
-rule get_BAM:
-    input:
-        "02_mapped/filtered/{srr}.sam"
-    output:
-        temp("02_mapped/BAM/{srr}.bam")
-    conda:
-        "sra_chipseq.yaml"
-    threads: 8
-    shell:
-        "samtools view --threads {threads} -b {input} > {output}"
-
-rule samtools_sort:
-    input:
-        get_Sam
-    output:
-        protected("02_mapped/sorted/{srr}.bam")
+        BAM = protected("02_mapped/sorted/{srr}.bam")
     conda:
         "sra_chipseq.yaml"
     shell:
     # why wildcards.sample? and not sample
         "samtools sort -T 02_mapped/sorted/{wildcards.srr} -O bam {input} > {output}"
+         "samtools index {input}"
 
-rule samtools_index:
-    input:
-        "02_mapped/sorted/{srr}.bam"
-    output:
-        protected("02_mapped/sorted/{srr}.bam.bai")
-    shell:
-        "samtools index {input}"
+
 
 rule merge_inputs:
     input:
@@ -237,3 +214,4 @@ rule make_bigWig:
     threads: 8
     shell:
         "bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads})"
+    
