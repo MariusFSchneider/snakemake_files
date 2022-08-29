@@ -59,7 +59,7 @@ def Merge_SAMPLES(wildcards):
     return expand("02_mapped/sorted/{srr}.bam", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab) & (SAMPLES == wildcards.ab)])
 
 def getPeakFile_single(wildcards):
-    return expand(""03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES ==wildcards.abs]")
+    return expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES ==wildcards.abs])
 
 def getBW(wildcards):
     return expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])    
