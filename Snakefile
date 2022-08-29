@@ -27,7 +27,7 @@ BIOPROJECT = samples_data["project"]
 
 sp = BIOSAMPLE + "_" + BIOPROJECT
 sa = ANTIBODIES + "/" + ACCESSIONS
-
+sl = LAYOUT +"/" + ACCESSIONS
 #localrules: prefetch, get_index_files, fastqdump
 
 rule all:
@@ -49,10 +49,10 @@ def getPeakFile_combo(wildcards):
 
 
 def getFile1(wildcards):
-    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = ab1[combo == wildcards.abcombo], samples = wildcards.samples2)
+    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = list(ab1[combo == wildcards.abcombo]), samples = wildcards.samples)
 
 def getFile2(wildcards):
-    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = ab2[combo == wildcards.abcombo], samples = wildcards.samples2)
+    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = list(ab2[combo == wildcards.abcombo]), samples = wildcards.samples2)
 
 
 def Merge_SAMPLES(wildcards):
@@ -68,7 +68,7 @@ def getBW(wildcards):
 
 #### modify codes
 def get_Bam(wildcards):
-   return expand("02_mapped/{layout}/{srr}.bam",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"], layout = list(LAYOUT[ACCESSION==wildcards.srr]))
+      return expand("02_mapped/{layout_srr}.bam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
 
 
 def getINPUTS(wildcards):
