@@ -39,13 +39,13 @@ rule all:
         
  ## add code to file       
         expand("05_quantified_signal\{abs}_quantified.csv", abs = ANTIBODIES.drop.duplicates())       
-        expand("06_merged_Samples/{ab}/{samples}.bw, ab = ANTIBODIES.drop.duplicates(), samples = SAMPLES.drop.duplicates()"),
-        expand("03_calledPeaks/{abcombo}/{samples2}_summits.bed", abcombo= combo, samples2= SAMPLES.drop.duplicates()),
+#        expand("06_merged_Samples/{ab}/{samples}.bw", ab = ANTIBODIES.drop.duplicates(), samples = SAMPLES.drop.duplicates()"),
+#        expand("03_calledPeaks/{abcombo}/{samples}_summits.bed", abcombo= combo, samples= SAMPLES.drop.duplicates()),
         expand("05_quantified_signal\{ab_combo}_quantified.csv", abcombo = combo)
         
 ### add code to file 
 def getPeakFile_combo(wildcards):
-    return expand("03_calledPeaks/{abcombo}/{samples2}_summits.bed", abcombo = combo, samples2 =SAMPLES.drop.duplicates() )
+    return expand("03_calledPeaks/{abcombo}/{samples}_summits.bed", abcombo = combo, samples =SAMPLES.drop.duplicates())
 
 
 def getFile1(wildcards):
@@ -134,7 +134,7 @@ rule fastqdump_SINGLE:
         id_srr = "{srr}"
     conda:
         "sra_chipseq.yaml"
-    threads: 24
+    threads: 8
     shell:
         "fasterq-dump {params.args} {params.id_srr} -e {threads}"
 
@@ -150,7 +150,7 @@ rule fastqdump_PAIRED:
         id_srr = "{srr}"
     conda:
         "sra_chipseq.yaml"
-    threads: 24
+    threads: 8
     shell:
         "fasterq-dump {params.args} {params.id_srr} -e {threads}"
 
@@ -203,8 +203,6 @@ rule samtools_sort_index:
         "samtools sort -T 02_mapped/sorted/{wildcards.srr} -O bam {input} > {output.BAMO}"
         "samtools index {input}"
 
-
-
 rule merge_inputs:
     input:
         getINPUTS
@@ -222,27 +220,30 @@ rule call_peaks:
         ctrl = getCtrl
     output:
         protected("03_calledPeaks/{sa}_summits.bed")
+    conda:
+        "sra_chipseq.yaml"        
     params:
         input = "-f BAM -g ",
         genome_size = config['genome_size'],
         qCutOff = config["q_cutOff_peakCall"]
     threads:2
     shell:
-        "macs2 callpeak -t {input.treat} -c {input.ctrl} {params.input} {params.genome_size} --outdir 03_calledPeaks/ -n {wildcards.sa} -q {params.qCutOff})"
+        "macs2 callpeak -t {input.treat} -c {input.ctrl} {params.input} {params.genome_size} --outdir 03_calledPeaks/ -n {wildcards.sa} -q {params.qCutOff}"
 
 rule make_bigWig:
     input:
         sample= "02_mapped/sorted/{srr}.bam",
         index = "02_mapped/sorted/{srr}.bam.bai"
-
     output:
         "04_bigWigFiles/{srr}.bw"
+    conda:
+        "sra_chipseq.yaml"        
     params:
         normalization = config["bigWig_normalization"],
         binsize= config["binSize"]
     threads: 8
     shell:
-        "bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads})"
+        "bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads}"
  
 rule quantify_peaks_single:
     input:
@@ -250,7 +251,9 @@ rule quantify_peaks_single:
         coverage = getBW
     output:
         "05_quantified_signal\{ab}_quantified.csv"
-    threads: 8
+    threads: 2
+    conda:
+        "sra_chipseq.yaml"        
     shell:
         "Rscript quantify {wildcards.ab}"
         
@@ -258,18 +261,30 @@ rule Merge_BWs:
     input: 
         Merge_SAMPLES
     output:
-        "06_merged_Samples/{ab}/{samples}.bw"
+        protected("06_merged_Samples/{ab}/{samples}.bw")
     conda:
         "sra_chipseq.yaml"
-    threads: 8
+    params:
+        normalization = config["bigWig_normalization"],
+        binsize= config["binSize"]        
+    threads: 4
     shell:
-        ""  ##hast to be modified
+        "samtools merge --threads {threads} -o 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam {input}"
+        "samtools sort -T 06_merged_Samples/{wildcards.ab}/{wildcards.samples} -O 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam > 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
+        "samtools index 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
+        "bamCoverage -b 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads}"
+        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam "
+        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam "
+        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam.bai "
+        
  rule find_overlaps:
     input:
         file1= getFile1,
         file2= getFile2
     output:
-        "03_calledPeaks/{abcombo}/{samples2}_summits.bed"
+        "03_calledPeaks/{abcombo}/{samples}_summits.bed"
+    conda:
+        "sra_chipseq.yaml"        
     shell:
         "" ##has to be modified
         
@@ -279,7 +294,9 @@ rule quantify_peaks_combo:
         coverage = getBW
     output:
         "05_quantified_signal\{ab_combo}_quantified.csv"
-    threads: 8
+    conda:
+        "sra_chipseq.yaml"        
+    threads: 2
     shell:
         "Rscript quantify {wildcards.ab_combo}"
     
