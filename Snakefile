@@ -3,7 +3,7 @@ import pandas as pd
 from itertools import combinations
 samples_data = pd.read_csv(config['samples'], sep =";")
 
-antibodies_oi = ["H3K4me3", "H3K27me3", ]
+antibodies_oi = ["H3K4me3", "H3K27me3", "ChIP-Seq input"]
 antibodies_used = ["H3K4me3", "H3K27me3"]
 #antibodies_used = config["antibodies"]
 antibodies_combination = [*combinations(antibodies_used, 2)]
