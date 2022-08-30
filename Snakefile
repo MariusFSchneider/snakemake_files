@@ -10,65 +10,73 @@ antibodies_combination = [*combinations(antibodies_used, 2)]
 antibodies_combination = pd.DataFrame(antibodies_combination, columns =['AB1','AB2'])
 ab1 = antibodies_combination.AB1
 ab2 = antibodies_combination.AB2
-combo =ab1 +"_" +ab2
+combos =ab1 +"_" +ab2
 
 ###add this to code to reduce samples and to tidy up table
-samples_data = samples_data.loc[samples_data["Exeriment"].isin(antibodies_oi)]
+samples_data = samples_data.loc[samples_data["Experiment"].isin(antibodies_oi)]
 samples_data['Sample Name'] = samples_data["Sample Name"].str.replace(',','_')
-samples_data['Sample Name'] = samples_data["Sample Name"].str.replace('\s','_')
+samples_data['Sample Name'] = samples_data["Sample Name"].str.replace('/s','_')
 
 
 ACCESSIONS = samples_data["SRR"]
-SAMPLES = samples_data["Sample"]
+SAMPLES = samples_data["Sample Name"]
 ANTIBODIES = samples_data["Experiment"]
 LAYOUT = samples_data["modus"]
-BIOSAMPLE = samples_data["biosample"]
+BIOSAMPLE = samples_data["bio_sample"]
 BIOPROJECT = samples_data["project"]
 
 sp = BIOSAMPLE + "_" + BIOPROJECT
 sa = ANTIBODIES + "/" + ACCESSIONS
 sl = LAYOUT +"/" + ACCESSIONS
 #localrules: prefetch, get_index_files, fastqdump
+samples = SAMPLES.drop_duplicates()
+antibodies_combination['samples']= [samples for x in antibodies_combination['AB1']]
+antibodies_combination = antibodies_combination.explode('samples')
+
+allABS = ANTIBODIES[ANTIBODIES != "ChIP-Seq input"] + combos
+allSAMP = ACCESSIONS[ANTIBODIES != "ChIP-Seq input"] + antibodies_combination['samples']
+ALL_PEAKS = allABS +"/" + allSAMP
 
 rule all:
     input:
         expand("02_mapped/sorted/{srr}.bam.bai", srr = ACCESSIONS),
         expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"]),
-        expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
+        expand("03_calledPeaks/{sa}_peaks.NarrowPeak", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
         expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"]),
-        
- ## add code to file       
-        expand("05_quantified_signal\{abs}_quantified.csv", abs = ANTIBODIES.drop.duplicates())       
-#        expand("06_merged_Samples/{ab}/{samples}.bw", ab = ANTIBODIES.drop.duplicates(), samples = SAMPLES.drop.duplicates()"),
-#        expand("03_calledPeaks/{abcombo}/{samples}_summits.bed", abcombo= combo, samples= SAMPLES.drop.duplicates()),
-        expand("05_quantified_signal\{ab_combo}_quantified.csv", abcombo = combo)
-        
-### add code to file 
+
+ ## add code to file
+        expand("05_quantified_signal/{abs}_quantified.tab", abs = ANTIBODIES[ANTIBODIES != "ChIP-Seq input"].drop_duplicates()),
+#        expand("03b_calledPeaks/{ab_1}_{ab_2}/{samples}.bed", ab_1 = ab1, ab_2 =ab2, samples = SAMPLES.drop_duplicates()),
+        expand("05b_quantified_signal/{ab_1}_{ab_2}_quantified.tab", ab_1 = ab1, ab_2 =ab2)
+
+### add code to file
 def getPeakFile_combo(wildcards):
-    return expand("03_calledPeaks/{abcombo}/{samples}_summits.bed", abcombo = combo, samples =SAMPLES.drop.duplicates())
+    return expand("03b_calledPeaks/{ab_1}_{ab_2}/{samples}.bed", ab_1 = ab1, ab_2 =ab2, samples = SAMPLES.drop_duplicates())
 
 
 def getFile1(wildcards):
-    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = list(ab1[combo == wildcards.abcombo]), samples = wildcards.samples)
+    return expand("04_bigWigFiles/{srr}.bw", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_1) &(SAMPLES == wildcards.samples)])
 
 def getFile2(wildcards):
-    return expand("06_merged_Samples/{ab}/{samples}.bw", ab = list(ab2[combo == wildcards.abcombo]), samples = wildcards.samples2)
+    return expand("04_bigWigFiles/{srr}.bw", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_2) &(SAMPLES == wildcards.samples)])
 
+def getFile1_len(wildcards):
+    return len(ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_1) &(SAMPLES == wildcards.samples)])
 
-def Merge_SAMPLES(wildcards):
-    return expand("02_mapped/sorted/{srr}.bam", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab) & (SAMPLES == wildcards.ab)])
+def getFile2_len(wildcards):
+    return len(ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_2) &(SAMPLES == wildcards.samples)])
 
 def getPeakFile_single(wildcards):
-    return expand("03_calledPeaks/{sa}_summits.bed", sa = sa[ANTIBODIES ==wildcards.abs])
+    return expand("03_calledPeaks/{sa}_peaks.NarrowPeak", sa = sa[ANTIBODIES ==wildcards.abs])
 
 def getBW(wildcards):
-    return expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])    
+    return expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"])
 
 
 
 #### modify codes
-def get_Bam(wildcards):
-      return expand("02_mapped/{layout_srr}.bam", layout_srr = list(sl[samples_data['SRR']==wildcards.srr]))
+def get_Sam(wildcards):
+      return expand("02_mapped/{layout_srr}.sam", layout_srr = list(sl[ACCESSIONS==wildcards.srr]))
 
 
 def getINPUTS(wildcards):
@@ -106,9 +114,9 @@ rule build_genome:
 
 rule prefetch_SINGLE:
     output:
-        temp("01_raw/SINGLE/{srr}/{srr}.sra")
+        "01_raw/SINGLE/{srr}/{srr}.sra"
     params:
-        "{srr} -O 01_raw/SINGLE"
+        "{srr} -O 01_raw/SINGLE/"
     conda:
         "sra_chipseq.yaml"
     shell:
@@ -116,9 +124,9 @@ rule prefetch_SINGLE:
 
 rule prefetch_PAIRED:
     output:
-        temp("01_raw/PAIRED/{srr}/{srr}.sra")
+        "01_raw/PAIRED/{srr}/{srr}.sra"
     params:
-        "{srr} -O 01_raw/PAIRED"
+        "{srr} -O 01_raw/PAIRED/"
     conda:
         "sra_chipseq.yaml"
     shell:
@@ -128,7 +136,7 @@ rule fastqdump_SINGLE:
     input:
         "01_raw/SINGLE/{srr}/{srr}.sra"
     output:
-        temp("01_raw/SINGLE/{srr}.fastq")
+        "01_raw/SINGLE/{srr}.fastq"
     params:
         args = "-S -O 01_raw/SINGLE/ -t 01_raw/SINGLE/",
         id_srr = "{srr}"
@@ -143,8 +151,8 @@ rule fastqdump_PAIRED:
     input:
         "01_raw/PAIRED/{srr}/{srr}.sra"
     output:
-        temp("01_raw/PAIRED/{srr}_1.fastq"),
-        temp("01_raw/PAIRED/{srr}_2.fastq")
+        out1 = "01_raw/PAIRED/{srr}_1.fastq",
+        out2 = "01_raw/PAIRED/{srr}_2.fastq"
     params:
         args = "-S -O 01_raw/PAIRED/ -t 01_raw/PAIRED/",
         id_srr = "{srr}"
@@ -153,6 +161,9 @@ rule fastqdump_PAIRED:
     threads: 8
     shell:
         "fasterq-dump {params.args} {params.id_srr} -e {threads}"
+
+
+
 
 rule bowtie2_map_SINGLE:
     input:
@@ -164,41 +175,71 @@ rule bowtie2_map_SINGLE:
         "sra_chipseq.yaml"
     threads: 24
     shell:
-        "bowtie2 -p {threads} -x genome -U {input.read} -S 02_mapped/SINGLE/{wildcards.srr}.sam)2> 02_mapped/SINGLE/{wildcards.srr}_alignment.txt"
-        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > 02_mapped/SINGLE/{wildcards.srr}_filtered.sam"
-        "samtools view --threads {threads} -b {input} > {output}"    
-        "rm -f 02_mapped/SINGLE/{wildcards.srr}.sam"
-        "rm -f 02_mapped/SINGLE/{wildcards.srr}_filtered.sam"
-        
-        
+        "bowtie2 -p {threads} -x genome -U {input.read} -S {output}"
+
 rule bowtie2_map_PAIRED:
     input:
         read_1 = "01_raw/PAIRED/{srr}_1.fastq",
         read_2 = "01_raw/PAIRED/{srr}_2.fastq",
         genome = "genome.1.bt2"
     output:
-        temp("02_mapped/PAIRED/{srr}.bam")
+        temp("02_mapped/PAIRED/{srr}.sam")
     conda:
         "sra_chipseq.yaml"
     threads: 24
     shell:
-        "(bowtie2 -p {threads} -x genome -1 {input.read_1} -2 {input.read_2} -S 02_mapped/PAIRED/{wildcards.srr}.sam)2> 02_mapped/PAIRED/{wildcards.srr}_alignment.txt"
-        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > 02_mapped/PAIRED/{wildcards.srr}_filtered.sam"
-        "samtools view --threads {threads} -b {input} > {output}"    
-        "rm -f 02_mapped/PAIRED/{wildcards.srr}.sam"
-        "rm -f 02_mapped/PAIRED/{wildcards.srr}_filtered.sam"
+        "bowtie2 -p {threads} -x genome -1 {input.read_1} -2 {input.read_2} -S {output}"
 
-
-rule samtools_sort_index:
+rule filterSAM_paired:
     input:
-        get_Bam
+        "02_mapped/PAIRED/{srr}.sam"
     output:
-        BAMO = protected("02_mapped/sorted/{srr}.bam"),
-        BAIO = protected("02_mapped/sorted/{srr}.bam.bai")
+        temp("02_mapped/filtered/{srr}.sam")
+    conda:
+        "sra_chipseq.yaml"
+    threads: 8
+    shell:
+        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > {output}"
+
+rule filterSAM_single:
+    input:
+        "02_mapped/SINGLE/{srr}.sam"
+    output:
+        temp("02_mapped/filtered/{srr}.sam")
+    conda:
+        "sra_chipseq.yaml"
+    threads: 8
+    shell:
+        "samtools view --threads {threads} -S -h {input} | grep -v 'XS:i:' > {output}"
+
+rule get_BAM:
+    input:
+        "02_mapped/filtered/{srr}.sam"
+    output:
+        temp("02_mapped/BAM/{srr}.bam")
+    conda:
+        "sra_chipseq.yaml"
+    threads: 8
+    shell:
+        "samtools view --threads {threads} -b {input} > {output}"
+
+rule samtools_sort:
+    input:
+        get_Sam
+    output:
+        protected("02_mapped/sorted/{srr}.bam")
     conda:
         "sra_chipseq.yaml"
     shell:
-        "samtools sort -T 02_mapped/sorted/{wildcards.srr} -O bam {input} > {output.BAMO}"
+    # why wildcards.sample? and not sample
+        "samtools sort -T 02_mapped/sorted/{wildcards.srr} -O bam {input} > {output}"
+
+rule samtools_index:
+    input:
+        "02_mapped/sorted/{srr}.bam"
+    output:
+        protected("02_mapped/sorted/{srr}.bam.bai")
+    shell:
         "samtools index {input}"
 
 rule merge_inputs:
@@ -217,9 +258,9 @@ rule call_peaks:
         treat = getTreat,
         ctrl = getCtrl
     output:
-        protected("03_calledPeaks/{sa}_summits.bed")
+        protected("03_calledPeaks/{sa}_peaks.NarrowPeak")
     conda:
-        "sra_chipseq.yaml"        
+        "sra_chipseq.yaml"
     params:
         input = "-f BAM -g ",
         genome_size = config['genome_size'],
@@ -233,74 +274,67 @@ rule make_bigWig:
         sample= "02_mapped/sorted/{srr}.bam",
         index = "02_mapped/sorted/{srr}.bam.bai"
     output:
-        "04_bigWigFiles/{srr}.bw"
+        bw= "04_bigWigFiles/{srr}.bw",
+        bdg = "04_bigWigFiles/{srr}.bdg"
     conda:
-        "sra_chipseq.yaml"        
+        "sra_chipseq.yaml"
     params:
         normalization = config["bigWig_normalization"],
         binsize= config["binSize"]
     threads: 8
     shell:
-        "bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads}"
- 
+        """
+        bamCoverage -b {input.sample} --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output.bw} --numberOfProcessors {threads}
+        BigWigToBedGraph {output.bw} {output.bdg}
+        """
 rule quantify_peaks_single:
     input:
-        peaks= getPeakFile_single,
-        coverage = getBW
+        peaks_s= getPeakFile_single,
+        coverage_s = getBW
     output:
-        "05_quantified_signal\{ab}_quantified.csv"
+        "05_quantified_signal/{abs}_quantified.tab"
     threads: 2
     conda:
-        "sra_chipseq.yaml"        
-    shell:
-        "Rscript scripts/Quantify_Regions.s {wildcards.ab}"
-        
-rule Merge_BWs:
-    input: 
-        Merge_SAMPLES
-    output:
-        temp("06_merged_Samples/{ab}/{samples}.bw")
-    conda:
         "sra_chipseq.yaml"
-    params:
-        normalization = config["bigWig_normalization"],
-        binsize= config["binSize"]        
-    threads: 8
     shell:
-        "samtools merge --threads {threads} -o 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam {input}"
-        "samtools sort -T 06_merged_Samples/{wildcards.ab}/{wildcards.samples} -O 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam > 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
-        "samtools index 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
-        "bamCoverage -b 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam --normalizeUsing {params.normalization} --binSize {params.binsize} -o {output} --numberOfProcessors {threads}"
-        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_unsorted.bam"
-        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam"
-        "rm -f 06_merged_Samples/{wildcards.ab}/{wildcards.samples}_sorted.bam.bai"
-        
- rule find_overlaps:
+        """
+        bedops --merge {input.peaks_s} > 03_calledPeaks/{wildcards.abs}.bed
+        multiBigwigSummary BED-file -b {input.coverage_s} --BED 03_calledPeaks/{wildcards.abs}.bed -o 05_quantified_signal/{wildcards.abs}_quantified.npz --outRawCounts {output}
+        """
+rule find_overlaps:
     input:
         file1= getFile1,
         file2= getFile2
     output:
-        "03_calledPeaks/{abcombo}/{samples}_summits.bed"
+        "03b_calledPeaks/{ab_1}_{ab_2}/{samples}.bed"
     conda:
         "sra_chipseq.yaml"
-    params:      
+    params:
         genome_size = config['genome_size'],
-        qCutOff = config["q_cutOff_peakCall"]
-    threads: 2        
-    shell:
-        "bedtools unionbedg -i {input.file1} {input.file2} > 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bedGraph"
-        "python scripts/takeLower.py 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bedGraph 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bw"
-        "macs2 bdgpeakcall -i 06_merged_Samples/{wildcards.abcombo}/{wildcards.samples}.bw-c {params.qCutOff} -o 03_calledPeaks/{wildcards.abcombo}/{wildcards.samples}"
-        
-rule quantify_peaks_combo:
-    input:
-        peaks= getPeakFile_compo,
-        coverage = getBW
-    output:
-        "05_quantified_signal\{ab_combo}_quantified.csv"
-    conda:
-        "sra_chipseq.yaml"        
+        qCutOff = config["q_cutOff_peakCall"],
+#        k1 = 1,
+#        k2 = 1
+        k1 = getFile1_len,
+        k2 = getFile2_len
     threads: 2
     shell:
-        "Rscript scripts/Quantify_Regions.s {wildcards.ab_combo}"
-    
+        """
+        bedtools unionbedg -i {input.file1} {input.file2} > 06_merged_Samples/{wildcards.ab_1}_{wildcards.ab_2}/{wildcards.samples}.bedGraph
+        python scripts/takeLower.py 06_merged_Samples/{wildcards.ab_1}_{wildcards.ab_2}/{wildcards.samples}.bedGraph 06_merged_Samples/{wildcards.ab_1}_{wildcards.ab_2}/{wildcards.samples}.bw {params.k1} {params.k2}
+        macs2 bdgpeakcall -i 06_merged_Samples/{wildcards.ab_1}_{wildcards.ab_2}/{wildcards.samples}.bdg --no-trackline --outdir 03b_calledPeaks/ -o {wildcards.ab_1}_{wildcards.ab_2}/{wildcards.samples}_summits.bed
+        """
+
+rule quantify_peaks_combo:
+    input:
+        peaks= getPeakFile_combo,
+        coverage = getBW
+    output:
+        "05b_quantified_signal/{ab_1}_{ab_2}_quantified.tab"
+    conda:
+        "sra_chipseq.yaml"
+    threads: 2
+    shell:
+        """
+        bedops --merge {input.peaks} > 03b_calledPeaks/{wildcards.ab_1}_{wildcards.ab_2}.bed
+        multiBigwigSummary BED-file -b {input.coverage} --BED 03b_calledPeaks/{wildcards.ab_1}_{wildcards.ab_2}.bed -o 05b_quantified_signal/{wildcards.ab_1}_{wildcards.ab_2}_quantified.npz --outRawCounts {output}
+        """
