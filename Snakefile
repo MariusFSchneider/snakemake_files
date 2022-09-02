@@ -3,9 +3,10 @@ import pandas as pd
 from itertools import combinations
 samples_data = pd.read_csv(config['samples'], sep =";")
 
-antibodies_oi = ["H3K4me3", "H3K27me3", "ChIP-Seq input"]
-antibodies_used = ["H3K4me3", "H3K27me3"]
-#antibodies_used = config["antibodies"]
+#antibodies_oi = ["H3K4me3", "H3K27me3", "ChIP-Seq input"]
+#antibodies_used = ["H3K4me3", "H3K27me3"]
+antibodies_oi = config["experiments"]
+antibodies_used = config["antibodies"]
 antibodies_combination = [*combinations(antibodies_used, 2)]
 antibodies_combination = pd.DataFrame(antibodies_combination, columns =['AB1','AB2'])
 ab1 = antibodies_combination.AB1
@@ -13,11 +14,20 @@ ab2 = antibodies_combination.AB2
 combos =ab1 +"_" +ab2
 
 ###add this to code to reduce samples and to tidy up table
+Experiments_OI = pd.read_csv(config['type'], sep =";")
+Experiments_OI['Experiments'] =Experiments_OI['Experiments'].str.replace(',','_')
+Experiments_OI['Experiments'] =Experiments_OI['Experiments'].str.replace('/s','_')
+filter_samples = Experiments_OI['Experiments']
+#filter_samples = ['lung','spleen','thymus']
 samples_data = samples_data.loc[samples_data["Experiment"].isin(antibodies_oi)]
+
 samples_data['Sample Name'] = samples_data["Sample Name"].str.replace(',','_')
 samples_data['Sample Name'] = samples_data["Sample Name"].str.replace('/s','_')
+samples_data = samples_data.loc[samples_data["Sample Name"].isin(filter_samples)]
 
+samples_data= samples_data[samples_data['repository'] == "SRA"]
 
+##define wildcards
 ACCESSIONS = samples_data["SRR"]
 SAMPLES = samples_data["Sample Name"]
 ANTIBODIES = samples_data["Experiment"]
@@ -42,23 +52,29 @@ rule all:
         expand("02_mapped/sorted/{srr}.bam.bai", srr = ACCESSIONS),
         expand("02_mapped/input/{bio_id}.bam", bio_id = sp[ANTIBODIES =="ChIP-Seq input"]),
         expand("03_calledPeaks/{sa}_peaks.NarrowPeak", sa = sa[ANTIBODIES != "ChIP-Seq input"]),
-        expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES =="ChIP-Seq input"]),
+        expand("04_bigWigFiles/{srr}.bw",  srr = ACCESSIONS[ANTIBODIES !="ChIP-Seq input"]),
 
  ## add code to file
         expand("05_quantified_signal/{abs}_quantified.tab", abs = ANTIBODIES[ANTIBODIES != "ChIP-Seq input"].drop_duplicates()),
 #        expand("03b_calledPeaks/{ab_1}_{ab_2}/{samples}.bed", ab_1 = ab1, ab_2 =ab2, samples = SAMPLES.drop_duplicates()),
         expand("05b_quantified_signal/{ab_1}_{ab_2}_quantified.tab", ab_1 = ab1, ab_2 =ab2)
 
-### add code to file
+##Input and parameter functions
+
+def getINPUTS_len(wildcards):
+    return len(ACCESSIONS.loc[(sp == wildcards.bio_id) & (ANTIBODIES == "ChIP-Seq input")])
+
+
+
 def getPeakFile_combo(wildcards):
     return expand("03b_calledPeaks/{ab_1}_{ab_2}/{samples}.bed", ab_1 = ab1, ab_2 =ab2, samples = SAMPLES.drop_duplicates())
 
 
 def getFile1(wildcards):
-    return expand("04_bigWigFiles/{srr}.bw", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_1) &(SAMPLES == wildcards.samples)])
+    return expand("04_bigWigFiles/{srr}.bdg", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_1) &(SAMPLES == wildcards.samples)])
 
 def getFile2(wildcards):
-    return expand("04_bigWigFiles/{srr}.bw", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_2) &(SAMPLES == wildcards.samples)])
+    return expand("04_bigWigFiles/{srr}.bdg", srr = ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_2) &(SAMPLES == wildcards.samples)])
 
 def getFile1_len(wildcards):
     return len(ACCESSIONS.loc[(ANTIBODIES == wildcards.ab_1) &(SAMPLES == wildcards.samples)])
@@ -249,9 +265,18 @@ rule merge_inputs:
         "02_mapped/input/{bio_id}.bam"
     conda:
         "sra_chipseq.yaml"
+    params:
+        lenIn = getINPUTS_len
     threads: 8
     shell:
-        "samtools merge --threads {threads} -o {output} {input}"
+        """
+        if [[ {params.lenIn} -eq 1 ]]
+        then
+        cp {input}  {output}
+        else
+        samtools merge --threads {threads} -o {output} {input}
+        fi
+        """
 
 rule call_peaks:
     input:
